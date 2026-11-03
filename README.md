@@ -53,3 +53,17 @@ Se usar provedor de nuvem, confira preços e licença comercial antes de produzi
 ## Limites do Telegram
 O Bot API documenta envio de vídeos de até 50 MB. O projeto usa MP4 H.264/AAC; se o arquivo ultrapassar o limite, reduza o bitrate ou envie como documento conforme os limites vigentes.
 https://core.telegram.org/bots/api
+
+
+## Geração automática de imagens (opcional e paga)
+O comando `/render` gera seis imagens individuais para cada usuário usando a OpenAI Images API, quando a integração estiver habilitada. As imagens ficam em `output/users/<telegram_user_id>/scenes/` e são reutilizadas em uma nova renderização do mesmo roteiro.
+
+Configure na hospedagem (nunca publique chaves no GitHub):
+- `IMAGE_PROVIDER=openai`
+- `OPENAI_API_KEY` com uma chave de API com faturamento habilitado
+- `IMAGE_MODEL=gpt-image-2` (padrão)
+- `IMAGE_QUALITY=low` (padrão econômico)
+
+A integração permanece desativada por padrão. Sem `IMAGE_PROVIDER=openai`, o bot não chama a API nem gera cobrança. A referência de preço publicada para GPT Image 2 em baixa qualidade e retrato 1024x1536 é aproximadamente US$ 0,005 por imagem; seis imagens ficam em torno de US$ 0,03 por vídeo, antes de eventuais custos de entrada e variações. Consulte a tabela atual antes de ativar: https://developers.openai.com/api/docs/guides/image-generation
+
+A consistência dos personagens é incentivada repetindo a descrição visual completa em cada prompt, mas não é garantida perfeitamente entre seis gerações independentes. Esta etapa gera imagens estáticas com movimento de câmera, não animação corporal.
