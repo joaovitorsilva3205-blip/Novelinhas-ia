@@ -1,6 +1,9 @@
 import base64
 import hashlib
+import json
 import os
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 
@@ -14,27 +17,68 @@ def _character_bible(plan):
     return "\n".join(rows)
 
 
-def generate_scene_images(plan, output_dir: Path, telegram_user_id: int):
-    """Generate six portrait scene stills. Calls a paid API only when explicitly enabled."""
-    provider = os.getenv("IMAGE_PROVIDER", "disabled").lower()
-    if provider != "openai":
+def _generate_with_cloudflare(prompt, destination):
+    account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip()
+    api_token = os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
+    if not account_id or not api_token:
         raise RuntimeError(
-            "Geração automática de imagens desativada. Para habilitar, configure "
-            "IMAGE_PROVIDER=openai e OPENAI_API_KEY na hospedagem. Isso gera cobrança por imagem."
+            "Configure CLOUDFLARE_ACCOUNT_ID e CLOUDFLARE_API_TOKEN na hospedagem."
         )
 
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY não configurada na hospedagem.")
+    model = os.getenv("CLOUDFLARE_IMAGE_MODEL", "@cf/black-forest-labs/flux-1-schnell")
+    url = (
+        "https://api.cloudflare.com/client/v4/accounts/"
+        + account_id
+        + "/ai/run/"
+        + model
+    )
+    payload = json.dumps({"prompt": prompt, "steps": 4}).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {api_token}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=240) as response:
+            result = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:500]
+        raise RuntimeError(
+            f"Cloudflare recusou a geração (HTTP {exc.code}): {detail}"
+        ) from exc
+    except Exception as exc:
+        raise RuntimeError(f"Falha ao chamar Cloudflare Workers AI: {exc}") from exc
 
-    from openai import OpenAI
+    encoded = (result.get("result") or {}).get("image")
+    if not encoded:
+        raise RuntimeError("Cloudflare não retornou a imagem esperada.")
+    destination.write_bytes(base64.b64decode(encoded))
 
-    model = os.getenv("IMAGE_MODEL", "gpt-image-2")
-    quality = os.getenv("IMAGE_QUALITY", "low")
+
+def generate_scene_images(plan, output_dir: Path, telegram_user_id: int):
+    """Generate six portrait stills with Cloudflare Workers AI free daily allowance."""
+    provider = os.getenv("IMAGE_PROVIDER", "disabled").lower()
+    if provider != "cloudflare":
+        raise RuntimeError(
+            "Geração automática desativada. Configure IMAGE_PROVIDER=cloudflare "
+            "e as credenciais Cloudflare na hospedagem."
+        )
+
     output_dir.mkdir(parents=True, exist_ok=True)
     bible = _character_bible(plan)
-    user_hash = hashlib.sha256(str(telegram_user_id).encode()).hexdigest()
-    client = OpenAI(api_key=api_key)
+    user_hash = hashlib.sha256(str(telegram_user_id).encode()).hexdigest()[:12]
+    fingerprint = hashlib.sha256(
+        json.dumps(plan, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    manifest = output_dir / "plan.sha256"
+    if not manifest.exists() or manifest.read_text(encoding="utf-8").strip() != fingerprint:
+        for old_image in output_dir.glob("scene_*.png"):
+            old_image.unlink()
+        manifest.write_text(fingerprint, encoding="utf-8")
 
     for scene in plan.get("scenes", []):
         number = int(scene["number"])
@@ -56,20 +100,12 @@ def generate_scene_images(plan, output_dir: Path, telegram_user_id: int):
             + "\nMood and sound context (visual guidance only): "
             + str(scene.get("sound_design") or "")
         )
-
-        result = client.images.generate(
-            model=model,
-            prompt=prompt,
-            size="1024x1536",
-            quality=quality,
-            output_format="png",
-            safety_identifier=user_hash,
-        )
-        encoded = result.data[0].b64_json
-        if not encoded:
-            raise RuntimeError(f"A API não retornou a imagem da cena {number}.")
-        temporary = destination.with_suffix(".png.tmp")
-        temporary.write_bytes(base64.b64decode(encoded))
-        temporary.replace(destination)
+        temporary = destination.with_suffix(".tmp")
+        try:
+            _generate_with_cloudflare(prompt, temporary)
+            temporary.replace(destination)
+        finally:
+            if temporary.exists():
+                temporary.unlink()
 
     return output_dir
