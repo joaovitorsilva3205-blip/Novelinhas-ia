@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: novelinhas-ia-bot
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python run.py
+    healthCheckPath: /
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: RENDER_EXTERNAL_URL
+        fromService:
+          type: web
+          name: novelinhas-ia-bot
+          property: host
+      - key: TELEGRAM_WEBHOOK_SECRET
+        generateValue: true
+      - key: WEBHOOK_PATH
+        generateValue: true
+      - key: IMAGE_PROVIDER
+        value: cloudflare
+      - key: CLOUDFLARE_ACCOUNT_ID
+        sync: false
+      - key: CLOUDFLARE_API_TOKEN
+        sync: false
+      - key: PLANNER_PROVIDER
+        value: ollama
