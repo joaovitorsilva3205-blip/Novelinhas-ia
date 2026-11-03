@@ -79,7 +79,7 @@ async def script_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for i in range(0, len(output), 3800):
             await update.message.reply_text(output[i:i + 3800])
         await update.message.reply_text(
-            "Quando a hospedagem estiver configurada, envie /render para montar o vídeo."
+            "Agora use /flow para copiar os prompts e gerar os 6 clipes no Google Flow."
         )
     except Exception:
         log.exception("Falha no roteiro")
