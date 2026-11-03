@@ -1,5 +1,6 @@
 import asyncio
 import json
+import hashlib
 import logging
 import os
 import secrets
@@ -131,7 +132,9 @@ def main():
         )
 
     webhook_path = os.getenv("WEBHOOK_PATH") or secrets.token_urlsafe(24)
-    webhook_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET") or secrets.token_urlsafe(32)
+    raw_webhook_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET") or secrets.token_urlsafe(32)
+    # Telegram accepts only A-Z, a-z, 0-9, underscore and hyphen in webhook secrets.
+    webhook_secret = hashlib.sha256(raw_webhook_secret.encode("utf-8")).hexdigest()
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("ajuda", help_cmd))
