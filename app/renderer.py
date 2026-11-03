@@ -70,7 +70,7 @@ def render_video(plan, base: Path, scene_dir=None, work_dir=None, output_path=No
         if audio_parts:
             listfile = work / f"audio_{n:02d}.txt"
             listfile.write_text(
-                "".join(f"file '{w.as_posix()}'\\n" for w in audio_parts),
+                "".join(f"file '{w.as_posix()}'\n" for w in audio_parts),
                 encoding="utf-8",
             )
             run([
@@ -104,7 +104,7 @@ def render_video(plan, base: Path, scene_dir=None, work_dir=None, output_path=No
 
     concat = work / "concat.txt"
     concat.write_text(
-        "".join(f"file '{p.as_posix()}'\\n" for p in clips),
+        "".join(f"file '{p.as_posix()}'\n" for p in clips),
         encoding="utf-8",
     )
     output = Path(output_path) if output_path else base / "output" / "novelinha_final.mp4"
