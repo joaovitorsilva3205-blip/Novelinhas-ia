@@ -7,7 +7,7 @@ import secrets
 from pathlib import Path
 
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, CallbackQueryHandler, filters
 
 from app.planner import create_production_plan
 from app.renderer import render_video
@@ -31,12 +31,13 @@ def plan_path_for(update: Update) -> Path:
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.clear()
+    context.user_data["wizard_step"] = "waiting_script"
     await update.message.reply_text(
-        "🍓 NOVELA FRUTAS AI v2\n\n"
-        "Envie um roteiro. Vou criar título, personagens e 6 cenas.\n"
-        "Use /flow para receber os prompts do Google Flow.\n"
-        "Envie os 6 clipes em ordem e use /montar para finalizar o MP4.\n\n"
-        "Comandos: /start, /ajuda, /flow, /status, /montar, /limpar_clipes"
+        "🍓 NOVELA FRUTAS AI 2.0\\n\\n"
+        "Vamos criar sua novelinha de 60 segundos!\\n"
+        "Primeiro, envie o roteiro ou conte a ideia da história. "
+        "Pode escrever do seu jeito: eu organizo tudo em 6 cenas."
     )
 
 
@@ -52,40 +53,94 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def script_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    script = (update.message.text or "").strip()
-    if len(script) < 30:
-        await update.message.reply_text("Envie uma história com pelo menos 30 caracteres.")
-        return
-
-    msg = await update.message.reply_text("✍️ Criando sua novelinha...")
+async def _create_and_send_plan(update: Update, context: ContextTypes.DEFAULT_TYPE, script: str):
+    msg = await update.message.reply_text("✍️ Criando roteiro, personagens e cenas...")
     try:
         plan = await asyncio.to_thread(create_production_plan, script)
+        plan["duration_seconds"] = 60
+        plan["scene_count"] = 6
         path = plan_path_for(update)
         path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
-
-        lines = [f"🎬 {plan['title']}", plan.get("logline", ""), "\nPersonagens:"]
+        context.user_data["wizard_step"] = "ready"
+        lines = [f"🎬 {plan.get('title', 'Sua novelinha')}", plan.get("logline", ""), "\\nPERSONAGENS:"]
         for character in plan.get("characters", []):
-            lines.append(
-                f"• {character['name']} — {character['fruit']} — voz {character['voice']}"
-            )
-        for scene in plan["scenes"]:
-            lines.append(f"\nCena {scene['number']}: {scene.get('action', '')}")
+            lines.append(f"• {character.get('name', 'Personagem')} — {character.get('fruit', '')} — {character.get('appearance', '')} — voz {character.get('voice', 'female')}")
+        for scene in plan.get("scenes", []):
+            lines.append(f"\\nCENA {scene.get('number')}: {scene.get('action', '')}")
             for dialogue in scene.get("dialogue", []):
-                lines.append(f"{dialogue['character']}: {dialogue['text']}")
-
-        await msg.edit_text("✅ Plano criado!")
-        output = "\n".join(lines)
-        for i in range(0, len(output), 3800):
-            await update.message.reply_text(output[i:i + 3800])
+                lines.append(f"{dialogue.get('character', 'Personagem')}: {dialogue.get('text', '')}")
+        await msg.edit_text("✅ História e personagens preparados!")
+        output = "\\n".join(lines)
+        for i in range(0, len(output), 3500):
+            await update.message.reply_text(output[i:i + 3500])
         await update.message.reply_text(
-            "Agora use /flow para copiar os prompts e gerar os 6 clipes no Google Flow."
+            "🎥 Agora vou preparar os prompts para o Google Flow. Digite /flow para recebê-los.\\n"
+            "Depois gere os 6 clipes no Flow e envie-os aqui para eu montar o episódio."
         )
     except Exception:
-        log.exception("Falha no roteiro")
-        await msg.edit_text(
-            "Não consegui criar o roteiro. Confira as configurações do planejador na hospedagem."
+        log.exception("Falha ao criar plano")
+        context.user_data["wizard_step"] = "waiting_script"
+        await msg.edit_text("❌ Não consegui criar o roteiro. Tente novamente enviando a história.")
+
+
+async def script_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = (update.message.text or "").strip()
+    step = context.user_data.get("wizard_step")
+    if step == "waiting_script":
+        if len(message) < 10:
+            await update.message.reply_text("Conte um pouco mais da história, com pelo menos 10 caracteres.")
+            return
+        context.user_data["story_script"] = message
+        context.user_data["wizard_step"] = "choosing_characters"
+        await update.message.reply_text(
+            "🍍 Agora escolha como vamos criar os personagens:\\n\\n"
+            "1️⃣ — Quero criar os personagens. Vou descrever cada um.\\n"
+            "2️⃣ — Deixe a inteligência artificial criar todos os personagens.\\n\\n"
+            "Responda apenas 1 ou 2."
         )
+        return
+
+    if step == "choosing_characters":
+        choice = message.lower()
+        if choice in ("1", "criar", "eu", "quero criar"):
+            context.user_data["wizard_step"] = "waiting_character_details"
+            await update.message.reply_text(
+                "✍️ Descreva seus personagens: nome, fruta, aparência, roupa, personalidade e se a voz é masculina ou feminina.\\n"
+                "Pode mandar todos de uma vez."
+            )
+            return
+        if choice in ("2", "ia", "inteligência artificial", "inteligencia artificial", "deixe a ia", "deixa a ia"):
+            story = context.user_data.get("story_script", "")
+            context.user_data["wizard_step"] = "creating_plan"
+            await update.message.reply_text("🤖 A IA vai criar os personagens e organizar as 6 cenas...")
+            await _create_and_send_plan(update, context, story + "\\n\\nCrie todos os personagens do zero, com frutas variadas, aparência 3D humanizada, roupas próprias e vozes adequadas.")
+            return
+        await update.message.reply_text("Responda 1 para criar os personagens ou 2 para deixar a IA criar.")
+        return
+
+    if step == "waiting_character_details":
+        if len(message) < 5:
+            await update.message.reply_text("Me conte um pouco mais sobre os personagens.")
+            return
+        story = context.user_data.get("story_script", "")
+        context.user_data["wizard_step"] = "creating_plan"
+        await update.message.reply_text("🎭 Perfeito! Vou respeitar suas descrições e criar as cenas...")
+        await _create_and_send_plan(
+            update, context,
+            story + "\\n\\nPERSONAGENS DEFINIDOS PELO USUÁRIO — preserve fielmente nomes, frutas, aparência, roupas, personalidades e gêneros de voz:\\n" + message
+        )
+        return
+
+    if step == "creating_plan":
+        await update.message.reply_text("Ainda estou preparando seu episódio. Aguarde um instante.")
+        return
+
+    if step == "ready":
+        await update.message.reply_text("Seu episódio já está planejado. Use /flow para ver os prompts ou /start para começar outra história.")
+        return
+
+    await update.message.reply_text("Digite /start para começar uma nova novelinha.")
+
 
 
 async def render_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
