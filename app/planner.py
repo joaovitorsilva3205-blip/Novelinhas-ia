@@ -5,7 +5,7 @@ import urllib.request
 
 PROMPT = """
 Você é roteirista de novelinhas verticais com frutas humanizadas 3D.
-Transforme a história em exatamente 6 cenas de cerca de 10 segundos (60s total).
+Transforme a história em exatamente 6 cenas de 10 segundos cada (60s total). Cada cena será gerada como clipe independente no Google Flow. Crie prompts visuais autossuficientes e mantenha continuidade visual entre cenas.
 Mantenha consistência dos personagens em todas as cenas: fruta, cores, roupas,
 acessórios e traços. Estética: animação 3D cinematográfica original, luz dramática,
 expressões claras, composição vertical 9:16. Português brasileiro.
@@ -17,9 +17,9 @@ Retorne somente JSON válido:
  "scenes":[
   {"number":1,"duration_seconds":10,"visual_prompt":"",
    "action":"","dialogue":[{"character":"","voice":"female ou male","text":""}],
-   "sound_design":""}
+   "sound_design":"", "flow_prompt":"Prompt completo para gerar clipe de 10 segundos no Google Flow, com ação contínua, movimento de câmera e áudio/dialogo. Repetir descrição dos personagens para consistência."}
  ],
- "ending_hook":""
+ "ending_hook":"", "flow_global_style":"Descrição curta do estilo visual e regras de continuidade para todas as cenas."
 }
 """
 
