@@ -17,6 +17,25 @@ def _character_bible(plan):
     return "\n".join(rows)
 
 
+def _safe_fallback_prompt(scene_number, plan):
+    # Fallback deliberately avoids free-form scene text that may trigger image safety filters.
+    fruits = [
+        str(c.get("fruit", "fruta"))[:40]
+        for c in plan.get("characters", [])[:3]
+    ]
+    cast = ", ".join(fruits) if fruits else "personagens-fruta"
+    return (
+        "Create a wholesome, family-friendly 3D animated illustration for a fictional "
+        "Brazilian fruit soap opera. Portrait 2:3 composition. "
+        f"Show {cast} as cute anthropomorphic fruit characters in a colorful living room. "
+        "Scene number " + str(scene_number) + ": expressive surprised and concerned faces, "
+        "a dramatic but harmless conversation, friendly body language, fully clothed, "
+        "bright cinematic lighting, polished high-quality 3D animation. "
+        "No romance, no intimacy, no violence, no weapons, no text, no subtitles, "
+        "no logos, no watermark."
+    )
+
+
 def _generate_with_cloudflare(prompt, destination):
     account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip()
     api_token = os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
@@ -60,7 +79,7 @@ def _generate_with_cloudflare(prompt, destination):
 
 
 def generate_scene_images(plan, output_dir: Path, telegram_user_id: int):
-    """Generate six portrait stills with Cloudflare Workers AI free daily allowance."""
+    """Generate six portrait stills with a safe fallback for image moderation rejections."""
     provider = os.getenv("IMAGE_PROVIDER", "disabled").lower()
     if provider != "cloudflare":
         raise RuntimeError(
@@ -70,7 +89,6 @@ def generate_scene_images(plan, output_dir: Path, telegram_user_id: int):
 
     output_dir.mkdir(parents=True, exist_ok=True)
     bible = _character_bible(plan)
-    user_hash = hashlib.sha256(str(telegram_user_id).encode()).hexdigest()[:12]
     fingerprint = hashlib.sha256(
         json.dumps(plan, ensure_ascii=False, sort_keys=True).encode("utf-8")
     ).hexdigest()
@@ -86,23 +104,30 @@ def generate_scene_images(plan, output_dir: Path, telegram_user_id: int):
         if destination.exists() and destination.stat().st_size > 0:
             continue
 
+        scene_text = str(scene.get("visual_prompt") or scene.get("action") or "")
         prompt = (
-            "Create one polished cinematic 3D animated still for an original Brazilian "
-            "vertical soap-opera story. Portrait composition 2:3, designed to be cropped "
-            "to 9:16. Expressive anthropomorphic fruit characters, clearly fruit-shaped "
-            "heads and human-like bodies, detailed appealing materials, dramatic but "
-            "readable lighting, emotional facial expressions, premium family-friendly "
-            "animation look. No text, no subtitles, no logos, no watermark. "
-            "Keep every character visually consistent with this character reference: "
-            + bible
-            + "\nScene action and framing: "
-            + str(scene.get("visual_prompt") or scene.get("action") or "")
-            + "\nMood and sound context (visual guidance only): "
-            + str(scene.get("sound_design") or "")
+            "Create one wholesome, family-friendly cinematic 3D animated still for an "
+            "original Brazilian fruit soap-opera story. Portrait composition 2:3. "
+            "Expressive anthropomorphic fruit characters with clearly fruit-shaped heads, "
+            "fully clothed, emotional but non-suggestive expressions, dramatic readable "
+            "lighting, premium family animation look. No intimacy, no nudity, no violence, "
+            "no text, no subtitles, no logos, no watermark. Character reference: "
+            + bible[:1200]
+            + ". Harmless scene description: "
+            + scene_text[:700]
         )
         temporary = destination.with_suffix(".tmp")
         try:
-            _generate_with_cloudflare(prompt, temporary)
+            try:
+                _generate_with_cloudflare(prompt, temporary)
+            except RuntimeError as exc:
+                # If the content filter rejects a generated description, retry with a
+                # neutral, non-explicit family-friendly scene rather than bypassing safety.
+                if "HTTP 400" not in str(exc) or "NSFW" not in str(exc):
+                    raise
+                _generate_with_cloudflare(
+                    _safe_fallback_prompt(number, plan), temporary
+                )
             temporary.replace(destination)
         finally:
             if temporary.exists():
