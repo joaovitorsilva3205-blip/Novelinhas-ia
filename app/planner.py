@@ -55,7 +55,24 @@ def _cloudflare_chat(script):
     result = payload.get("result") or {}
     text = result.get("response") or result.get("output")
     if not text:
-        raise RuntimeError("Cloudflare não retornou um roteiro em texto.")
+        raise RuntimeError("Cloudflare não retornou um roteiro.")
+
+    # Alguns modelos da Cloudflare já devolvem JSON estruturado como dict.
+    if isinstance(text, dict):
+        if "title" in text and "scenes" in text:
+            return text
+        for key in ("response", "output", "content"):
+            if isinstance(text.get(key), str):
+                text = text[key]
+                break
+        else:
+            raise RuntimeError(
+                "Cloudflare retornou um objeto JSON em formato inesperado."
+            )
+
+    if not isinstance(text, str):
+        raise RuntimeError("Cloudflare retornou um formato de roteiro inválido.")
+
     # Accept a JSON object even if the model wraps it in Markdown fences.
     cleaned = text.strip()
     if cleaned.startswith("```"):
