@@ -46,24 +46,36 @@ def render_flow_video(plan, clips_dir, work_dir, output_path):
 
         clip = work_dir / f"scene_{number:02d}_final.mp4"
         vf = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1"
+        probe = subprocess.run([ffmpeg, "-i", str(source)], capture_output=True, text=True)
+        source_has_audio = "Audio:" in (probe.stderr or "")
         if lines:
             listing = work_dir / f"voice_{number:02d}.txt"
             listing.write_text("".join(f"file '{p.as_posix()}'\n" for p in lines), encoding="utf-8")
             voice_track = work_dir / f"voice_{number:02d}.mp3"
             _run([ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", str(listing), "-c:a", "libmp3lame", str(voice_track)])
+            if source_has_audio:
+                inputs = ["-i", str(source), "-i", str(voice_track)]
+                audio_filter = "[0:a]volume=0.18[amb];[1:a]volume=1.0[voice];[amb][voice]amix=inputs=2:duration=longest:dropout_transition=2[a]"
+            else:
+                inputs = ["-i", str(source), "-f", "lavfi", "-t", "10", "-i", "anullsrc=r=44100:cl=stereo", "-i", str(voice_track)]
+                audio_filter = "[1:a]volume=0.08[amb];[2:a]volume=1.0[voice];[amb][voice]amix=inputs=2:duration=longest:dropout_transition=2[a]"
             _run([
-                ffmpeg, "-y", "-i", str(source), "-i", str(voice_track),
-                "-filter_complex",
-                "[0:a]volume=0.18[amb];[1:a]volume=1.0[voice];[amb][voice]amix=inputs=2:duration=first:dropout_transition=2[a]",
+                ffmpeg, "-y", *inputs, "-filter_complex", audio_filter,
                 "-map", "0:v:0", "-map", "[a]", "-vf", vf,
                 "-t", "10", "-r", "25", "-c:v", "libx264", "-preset", "veryfast",
                 "-crf", "23", "-c:a", "aac", "-b:a", "160k", str(clip)
             ])
         else:
+            if source_has_audio:
+                audio_input = ["-i", str(source)]
+                audio_map = ["-map", "0:a:0"]
+            else:
+                audio_input = ["-i", str(source), "-f", "lavfi", "-t", "10", "-i", "anullsrc=r=44100:cl=stereo"]
+                audio_map = ["-map", "1:a:0"]
             _run([
-                ffmpeg, "-y", "-i", str(source), "-vf", vf, "-t", "10", "-r", "25",
-                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-                "-c:a", "aac", "-b:a", "160k", str(clip)
+                ffmpeg, "-y", *audio_input, "-map", "0:v:0", *audio_map,
+                "-vf", vf, "-t", "10", "-r", "25", "-c:v", "libx264",
+                "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-b:a", "160k", str(clip)
             ])
         rendered.append(clip)
 
