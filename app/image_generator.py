@@ -18,7 +18,6 @@ def _character_bible(plan):
 
 
 def _safe_fallback_prompt(scene_number, plan):
-    # Fallback deliberately avoids free-form scene text that may trigger image safety filters.
     fruits = [
         str(c.get("fruit", "fruta"))[:40]
         for c in plan.get("characters", [])[:3]
@@ -78,8 +77,10 @@ def _generate_with_cloudflare(prompt, destination):
     destination.write_bytes(base64.b64decode(encoded))
 
 
-def generate_scene_images(plan, output_dir: Path, telegram_user_id: int):
-    """Generate six portrait stills with a safe fallback for image moderation rejections."""
+def generate_scene_images(
+    plan, output_dir: Path, telegram_user_id: int, progress_callback=None
+):
+    """Generate six portrait stills and optionally report progress for each scene."""
     provider = os.getenv("IMAGE_PROVIDER", "disabled").lower()
     if provider != "cloudflare":
         raise RuntimeError(
@@ -98,11 +99,18 @@ def generate_scene_images(plan, output_dir: Path, telegram_user_id: int):
             old_image.unlink()
         manifest.write_text(fingerprint, encoding="utf-8")
 
-    for scene in plan.get("scenes", []):
+    scenes = plan.get("scenes", [])
+    total = len(scenes)
+    for index, scene in enumerate(scenes, start=1):
         number = int(scene["number"])
         destination = output_dir / f"scene_{number:02d}.png"
         if destination.exists() and destination.stat().st_size > 0:
+            if progress_callback:
+                progress_callback(f"✅ Cena {index}/{total}: imagem já estava pronta.")
             continue
+
+        if progress_callback:
+            progress_callback(f"🎨 Gerando imagem da cena {index}/{total}...")
 
         scene_text = str(scene.get("visual_prompt") or scene.get("action") or "")
         prompt = (
@@ -121,14 +129,14 @@ def generate_scene_images(plan, output_dir: Path, telegram_user_id: int):
             try:
                 _generate_with_cloudflare(prompt, temporary)
             except RuntimeError as exc:
-                # If the content filter rejects a generated description, retry with a
-                # neutral, non-explicit family-friendly scene rather than bypassing safety.
                 if "HTTP 400" not in str(exc) or "NSFW" not in str(exc):
                     raise
                 _generate_with_cloudflare(
                     _safe_fallback_prompt(number, plan), temporary
                 )
             temporary.replace(destination)
+            if progress_callback:
+                progress_callback(f"✅ Cena {index}/{total} concluída.")
         finally:
             if temporary.exists():
                 temporary.unlink()
