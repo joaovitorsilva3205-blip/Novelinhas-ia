@@ -7,15 +7,15 @@ def run(cmd):
 def safe_name(s):
     return re.sub(r"[^A-Za-z0-9_-]+", "_", s or "personagem").strip("_").lower()
 
-def render_video(plan, base: Path):
+def render_video(plan, base: Path, scene_dir=None, work_dir=None, output_path=None):
     ffmpeg = os.getenv("FFMPEG_BIN", "ffmpeg")
     piper = os.getenv("PIPER_BIN", "piper")
     female_model = os.getenv("PIPER_FEMALE_MODEL", "")
     male_model = os.getenv("PIPER_MALE_MODEL", "")
     if not female_model or not male_model:
         raise RuntimeError("Configure PIPER_FEMALE_MODEL e PIPER_MALE_MODEL no .env")
-    scene_dir = base / "assets" / "scenes"
-    work = base / "output" / "work"
+    scene_dir = Path(scene_dir) if scene_dir else base / "assets" / "scenes"
+    work = Path(work_dir) if work_dir else base / "output" / "work"
     work.mkdir(parents=True, exist_ok=True)
     clips = []
     srt = []
@@ -73,7 +73,8 @@ def render_video(plan, base: Path):
 
     concat = work / "concat.txt"
     concat.write_text("".join(f"file '{p.as_posix()}'\n" for p in clips), encoding="utf-8")
-    output = base / "output" / "novelinha_final.mp4"
+    output = Path(output_path) if output_path else base / "output" / "novelinha_final.mp4"
+    output.parent.mkdir(parents=True, exist_ok=True)
     run([ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", str(concat),
          "-c", "copy", str(output)])
     return output
