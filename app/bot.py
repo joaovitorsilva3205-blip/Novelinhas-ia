@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import secrets
 from pathlib import Path
 
 from telegram import Update
@@ -17,9 +18,6 @@ log = logging.getLogger("novela-frutas-ai")
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 BASE = Path(__file__).resolve().parent.parent
 USER_DATA = BASE / "output" / "users"
-
-# The current renderer uses shared scene assets and output/work paths.
-# Serialize renders until the renderer is converted to isolated job workspaces.
 RENDER_LOCK = asyncio.Lock()
 
 
@@ -32,23 +30,22 @@ def plan_path_for(update: Update) -> Path:
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🍓 NOVELA FRUTAS AI v2\\n\\n"
-        "Envie um roteiro. Vou criar título, personagens e 6 cenas.\\n"
-        "Use /render para gerar as imagens (se ativadas) e montar o MP4.\\n\\n"
+        "🍓 NOVELA FRUTAS AI v2\n\n"
+        "Envie um roteiro. Vou criar título, personagens e 6 cenas.\n"
+        "Use /render para gerar as imagens (se ativadas) e montar o MP4.\n\n"
         "Comandos: /start, /ajuda, /render"
     )
 
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Fluxo econômico:\\n"
-        "1) Envie o roteiro em texto.\\n"
-        "2) O bot cria um plano de 6 cenas.\\n"
-        "3) As imagens devem estar em assets/scenes/scene_01.png até scene_06.png.\\n"
-        "4) Configure duas vozes Piper em voices/ e os caminhos no .env.\\n"
-        "5) Envie /render para montar e receber o MP4.\\n\\n"
-        "A geração automática de imagens ainda não está incluída. O modo econômico usa "
-        "movimento de câmera sobre imagens estáticas, sem animação corporal real."
+        "Fluxo econômico:\n"
+        "1) Envie o roteiro em texto.\n"
+        "2) O bot cria um plano de 6 cenas.\n"
+        "3) Configure Cloudflare Workers AI para gerar as imagens automaticamente.\n"
+        "4) Configure FFmpeg e os modelos Piper na hospedagem.\n"
+        "5) Envie /render para montar e receber o MP4.\n\n"
+        "As imagens são estáticas com movimento de câmera; não há animação corporal real."
     )
 
 
@@ -64,34 +61,36 @@ async def script_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         path = plan_path_for(update)
         path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
 
-        lines = [f"🎬 {plan['title']}", plan.get("logline", ""), "\\nPersonagens:"]
+        lines = [f"🎬 {plan['title']}", plan.get("logline", ""), "\nPersonagens:"]
         for character in plan.get("characters", []):
             lines.append(
                 f"• {character['name']} — {character['fruit']} — voz {character['voice']}"
             )
         for scene in plan["scenes"]:
-            lines.append(f"\\nCena {scene['number']}: {scene.get('action', '')}")
+            lines.append(f"\nCena {scene['number']}: {scene.get('action', '')}")
             for dialogue in scene.get("dialogue", []):
                 lines.append(f"{dialogue['character']}: {dialogue['text']}")
 
         await msg.edit_text("✅ Plano criado!")
-        output = "\\n".join(lines)
+        output = "\n".join(lines)
         for i in range(0, len(output), 3800):
             await update.message.reply_text(output[i:i + 3800])
         await update.message.reply_text(
-            "Quando as 6 imagens estiverem prontas e as vozes configuradas, envie /render."
+            "Quando a hospedagem estiver configurada, envie /render para montar o vídeo."
         )
     except Exception:
         log.exception("Falha no roteiro")
         await msg.edit_text(
-            "Não consegui criar o roteiro. Confira o planejador e as configurações no .env."
+            "Não consegui criar o roteiro. Confira as configurações do planejador na hospedagem."
         )
 
 
 async def render_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     path = plan_path_for(update)
     if not path.exists():
-        await update.message.reply_text("Primeiro envie um roteiro para este bot.")
+        await update.message.reply_text(
+            "Não encontrei um roteiro salvo. Envie a história novamente e tente /render."
+        )
         return
 
     msg = await update.message.reply_text(
@@ -99,7 +98,6 @@ async def render_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     try:
         plan = json.loads(path.read_text(encoding="utf-8"))
-        # Lock protects the shared FFmpeg work/output directory from simultaneous jobs.
         async with RENDER_LOCK:
             user_dir = path.parent
             scene_dir = user_dir / "scenes"
@@ -107,7 +105,9 @@ async def render_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             output_path = user_dir / "novelinha_final.mp4"
             await msg.edit_text("Gerando imagens das seis cenas...")
             await asyncio.to_thread(generate_scene_images, plan, scene_dir, update.effective_user.id)
-            output = await asyncio.to_thread(render_video, plan, BASE, scene_dir, work_dir, output_path)
+            output = await asyncio.to_thread(
+                render_video, plan, BASE, scene_dir, work_dir, output_path
+            )
             await msg.edit_text("✅ Vídeo pronto! Enviando...")
             with output.open("rb") as video_file:
                 await update.message.reply_video(
@@ -117,17 +117,36 @@ async def render_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         log.exception("Falha ao renderizar vídeo")
         await msg.edit_text(
-            "Não consegui renderizar. Confira a chave e ativação da geração de imagens, FFmpeg e os modelos de voz Piper. Veja os registros do servidor para o erro detalhado."
+            "Não consegui renderizar. Confira Cloudflare Workers AI, FFmpeg e os modelos Piper. "
+            "Os registros do servidor mostram o erro técnico."
         )
 
 
 def main():
+    public_url = os.getenv("RENDER_EXTERNAL_URL", "").rstrip("/")
+    port = int(os.getenv("PORT", "10000"))
+    if not public_url:
+        raise RuntimeError(
+            "RENDER_EXTERNAL_URL não definida. Configure o domínio público do serviço Render."
+        )
+
+    webhook_path = os.getenv("WEBHOOK_PATH") or secrets.token_urlsafe(24)
+    webhook_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET") or secrets.token_urlsafe(32)
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("ajuda", help_cmd))
     app.add_handler(CommandHandler("render", render_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, script_handler))
-    app.run_polling()
+
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=port,
+        url_path=webhook_path,
+        webhook_url=f"{public_url}/{webhook_path}",
+        secret_token=webhook_secret,
+        drop_pending_updates=False,
+        allowed_updates=Update.ALL_TYPES,
+    )
 
 
 if __name__ == "__main__":
