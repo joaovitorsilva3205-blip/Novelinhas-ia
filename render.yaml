@@ -24,3 +24,9 @@ services:
         value: cloudflare
       - key: CLOUDFLARE_IMAGE_MODEL
         value: "@cf/black-forest-labs/flux-1-schnell"
+
+  - type: web
+    name: novela-frutas-ai-site
+    runtime: static
+    buildCommand: echo "Publicando NOVELA FRUTAS AI"
+    staticPublishPath: ./site
