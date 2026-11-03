@@ -1,4 +1,7 @@
-import os, json, urllib.request
+import os
+import json
+import urllib.request
+
 
 PROMPT = """
 Você é roteirista de novelinhas verticais com frutas humanizadas 3D.
@@ -20,31 +23,80 @@ Retorne somente JSON válido:
 }
 """
 
+
+def _cloudflare_chat(script):
+    account_id = os.environ["CLOUDFLARE_ACCOUNT_ID"].strip()
+    token = os.environ["CLOUDFLARE_API_TOKEN"].strip()
+    model = os.getenv("CLOUDFLARE_TEXT_MODEL", "@cf/meta/llama-3.1-8b-instruct")
+    url = (
+        "https://api.cloudflare.com/client/v4/accounts/"
+        + account_id
+        + "/ai/run/"
+        + model
+    )
+    body = json.dumps({
+        "messages": [
+            {"role": "system", "content": PROMPT},
+            {"role": "user", "content": script},
+        ],
+        "max_tokens": 3500,
+        "temperature": 0.7,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        url, data=body,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=180) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    result = payload.get("result") or {}
+    text = result.get("response") or result.get("output")
+    if not text:
+        raise RuntimeError("Cloudflare não retornou um roteiro em texto.")
+    # Accept a JSON object even if the model wraps it in Markdown fences.
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+    start, end = cleaned.find("{"), cleaned.rfind("}")
+    if start < 0 or end <= start:
+        raise RuntimeError("O modelo não retornou JSON válido.")
+    return json.loads(cleaned[start:end + 1])
+
+
 def create_production_plan(script):
-    provider = os.getenv("PLANNER_PROVIDER", "ollama").lower()
+    provider = os.getenv("PLANNER_PROVIDER", "cloudflare").lower()
+    if provider == "cloudflare":
+        return _cloudflare_chat(script)
     if provider == "openai":
         from openai import OpenAI
         client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
         r = client.chat.completions.create(
             model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-            response_format={"type":"json_object"},
-            messages=[{"role":"system","content":PROMPT},
-                      {"role":"user","content":script}],
-            temperature=0.8
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": PROMPT},
+                {"role": "user", "content": script},
+            ],
+            temperature=0.8,
         )
         return json.loads(r.choices[0].message.content)
 
-    # Ollama local: gratuito, mas exige computador com Ollama instalado e modelo baixado.
+    # Ollama local: requires a separate machine running Ollama.
     host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
     model = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
     body = json.dumps({
         "model": model, "stream": False, "format": "json",
-        "messages": [{"role":"system","content":PROMPT},
-                     {"role":"user","content":script}]
+        "messages": [
+            {"role": "system", "content": PROMPT},
+            {"role": "user", "content": script},
+        ],
     }).encode()
     req = urllib.request.Request(
         host.rstrip("/") + "/api/chat", data=body,
-        headers={"Content-Type":"application/json"}
+        headers={"Content-Type": "application/json"},
     )
     with urllib.request.urlopen(req, timeout=600) as response:
         data = json.loads(response.read().decode())
