@@ -34,7 +34,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🍓 NOVELA FRUTAS AI v2\\n\\n"
         "Envie um roteiro. Vou criar título, personagens e 6 cenas.\\n"
-        "Quando as imagens e vozes estiverem configuradas, use /render para montar o MP4.\\n\\n"
+        "Use /render para gerar as imagens (se ativadas) e montar o MP4.\\n\\n"
         "Comandos: /start, /ajuda, /render"
     )
 
@@ -117,7 +117,7 @@ async def render_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         log.exception("Falha ao renderizar vídeo")
         await msg.edit_text(
-            "Não consegui renderizar. Confira as 6 imagens, FFmpeg e os modelos de voz Piper."
+            "Não consegui renderizar. Confira a chave e ativação da geração de imagens, FFmpeg e os modelos de voz Piper. Veja os registros do servidor para o erro detalhado."
         )
 
 
