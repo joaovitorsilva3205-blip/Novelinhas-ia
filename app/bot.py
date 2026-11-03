@@ -34,8 +34,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     context.user_data["wizard_step"] = "waiting_script"
     await update.message.reply_text(
-        "🍓 NOVELA FRUTAS AI 2.0\\n\\n"
-        "Vamos criar sua novelinha de 60 segundos!\\n"
+        "🍓 NOVELA FRUTAS AI 2.0\n\n"
+        "Vamos criar sua novelinha de 60 segundos!\n"
         "Primeiro, envie o roteiro ou conte a ideia da história. "
         "Pode escrever do seu jeito: eu organizo tudo em 6 cenas."
     )
@@ -62,19 +62,19 @@ async def _create_and_send_plan(update: Update, context: ContextTypes.DEFAULT_TY
         path = plan_path_for(update)
         path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
         context.user_data["wizard_step"] = "ready"
-        lines = [f"🎬 {plan.get('title', 'Sua novelinha')}", plan.get("logline", ""), "\\nPERSONAGENS:"]
+        lines = [f"🎬 {plan.get('title', 'Sua novelinha')}", plan.get("logline", ""), "\nPERSONAGENS:"]
         for character in plan.get("characters", []):
             lines.append(f"• {character.get('name', 'Personagem')} — {character.get('fruit', '')} — {character.get('appearance', '')} — voz {character.get('voice', 'female')}")
         for scene in plan.get("scenes", []):
-            lines.append(f"\\nCENA {scene.get('number')}: {scene.get('action', '')}")
+            lines.append(f"\nCENA {scene.get('number')}: {scene.get('action', '')}")
             for dialogue in scene.get("dialogue", []):
                 lines.append(f"{dialogue.get('character', 'Personagem')}: {dialogue.get('text', '')}")
         await msg.edit_text("✅ História e personagens preparados!")
-        output = "\\n".join(lines)
+        output = "\n".join(lines)
         for i in range(0, len(output), 3500):
             await update.message.reply_text(output[i:i + 3500])
         await update.message.reply_text(
-            "🎥 Agora vou preparar os prompts para o Google Flow. Digite /flow para recebê-los.\\n"
+            "🎥 Agora vou preparar os prompts para o Google Flow. Digite /flow para recebê-los.\n"
             "Depois gere os 6 clipes no Flow e envie-os aqui para eu montar o episódio."
         )
     except Exception:
@@ -93,9 +93,9 @@ async def script_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["story_script"] = message
         context.user_data["wizard_step"] = "choosing_characters"
         await update.message.reply_text(
-            "🍍 Agora escolha como vamos criar os personagens:\\n\\n"
-            "1️⃣ — Quero criar os personagens. Vou descrever cada um.\\n"
-            "2️⃣ — Deixe a inteligência artificial criar todos os personagens.\\n\\n"
+            "🍍 Agora escolha como vamos criar os personagens:\n\n"
+            "1️⃣ — Quero criar os personagens. Vou descrever cada um.\n"
+            "2️⃣ — Deixe a inteligência artificial criar todos os personagens.\n\n"
             "Responda apenas 1 ou 2."
         )
         return
@@ -105,7 +105,7 @@ async def script_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if choice in ("1", "criar", "eu", "quero criar"):
             context.user_data["wizard_step"] = "waiting_character_details"
             await update.message.reply_text(
-                "✍️ Descreva seus personagens: nome, fruta, aparência, roupa, personalidade e se a voz é masculina ou feminina.\\n"
+                "✍️ Descreva seus personagens: nome, fruta, aparência, roupa, personalidade e se a voz é masculina ou feminina.\n"
                 "Pode mandar todos de uma vez."
             )
             return
@@ -113,7 +113,7 @@ async def script_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             story = context.user_data.get("story_script", "")
             context.user_data["wizard_step"] = "creating_plan"
             await update.message.reply_text("🤖 A IA vai criar os personagens e organizar as 6 cenas...")
-            await _create_and_send_plan(update, context, story + "\\n\\nCrie todos os personagens do zero, com frutas variadas, aparência 3D humanizada, roupas próprias e vozes adequadas.")
+            await _create_and_send_plan(update, context, story + "\n\nCrie todos os personagens do zero, com frutas variadas, aparência 3D humanizada, roupas próprias e vozes adequadas.")
             return
         await update.message.reply_text("Responda 1 para criar os personagens ou 2 para deixar a IA criar.")
         return
@@ -127,7 +127,7 @@ async def script_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("🎭 Perfeito! Vou respeitar suas descrições e criar as cenas...")
         await _create_and_send_plan(
             update, context,
-            story + "\\n\\nPERSONAGENS DEFINIDOS PELO USUÁRIO — preserve fielmente nomes, frutas, aparência, roupas, personalidades e gêneros de voz:\\n" + message
+            story + "\n\nPERSONAGENS DEFINIDOS PELO USUÁRIO — preserve fielmente nomes, frutas, aparência, roupas, personalidades e gêneros de voz:\n" + message
         )
         return
 
