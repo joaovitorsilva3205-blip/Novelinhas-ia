@@ -7,8 +7,8 @@ PROMPT = """
 Você é roteirista de novelinhas verticais com frutas humanizadas 3D.
 Transforme a história em exatamente 6 cenas de 10 segundos cada (60s total). Cada cena será gerada como clipe independente no Google Flow. Crie prompts visuais autossuficientes e mantenha continuidade visual entre cenas.
 Mantenha consistência dos personagens em todas as cenas: fruta, cores, roupas,
-acessórios e traços. Estética: animação 3D cinematográfica original, luz dramática,
-expressões claras, composição vertical 9:16. Português brasileiro.
+acessórios e traços. Estética: animação 3D cinematográfica original, frutas antropomórficas com cabeça claramente formada pela fruta e corpo humanoide, olhos e boca expressivos, roupas e acessórios consistentes, luz dramática,
+expressões claras, composição vertical 9:16, enquadramento de corpo inteiro ou plano médio, movimento corporal visível, sem texto na tela. Falas em português brasileiro.
 Não imite franquias nem personagens protegidos.
 Retorne somente JSON válido:
 {
