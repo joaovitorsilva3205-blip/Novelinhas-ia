@@ -9,6 +9,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, ContextTyp
 
 from app.planner import create_production_plan
 from app.renderer import render_video
+from app.image_generator import generate_scene_images
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("novela-frutas-ai")
@@ -100,7 +101,13 @@ async def render_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         plan = json.loads(path.read_text(encoding="utf-8"))
         # Lock protects the shared FFmpeg work/output directory from simultaneous jobs.
         async with RENDER_LOCK:
-            output = await asyncio.to_thread(render_video, plan, BASE)
+            user_dir = path.parent
+            scene_dir = user_dir / "scenes"
+            work_dir = user_dir / "work"
+            output_path = user_dir / "novelinha_final.mp4"
+            await msg.edit_text("Gerando imagens das seis cenas...")
+            await asyncio.to_thread(generate_scene_images, plan, scene_dir, update.effective_user.id)
+            output = await asyncio.to_thread(render_video, plan, BASE, scene_dir, work_dir, output_path)
             await msg.edit_text("✅ Vídeo pronto! Enviando...")
             with output.open("rb") as video_file:
                 await update.message.reply_video(
