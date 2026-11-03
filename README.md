@@ -1,14 +1,14 @@
-# NOVELA FRUTAS AI v2 — implantação econômica
+# NOVELA FRUTAS AI 2.0 — modo híbrido e implantação econômica
 
 ## O que o projeto prepara
 - Bot do Telegram em Python usando webhook para hospedagem web.
 - Roteiros de seis cenas gerados por Cloudflare Workers AI.
-- Seis imagens 3D estáticas geradas por FLUX.1 Schnell na Cloudflare.
-- Renderização vertical MP4 com movimento de câmera (Ken Burns).
+- Prompts detalhados para seis clipes de vídeo de 10 segundos no Google Flow (geração manual pelo usuário).
+- Recebimento de seis clipes do Google Flow pelo Telegram, dublagem brasileira e montagem vertical MP4 de 60 segundos.
 - Falas com vozes neurais brasileiras via Edge TTS: Francisca (feminina) e Antonio (masculina).
 - Envio do vídeo pelo Telegram.
 
-**Limitações:** as imagens são estáticas; os personagens não fazem animação corporal real. A cota Cloudflare de texto e imagem é compartilhada. O Edge TTS precisa de conexão com a internet e depende de um serviço online de terceiros; a disponibilidade e os limites podem mudar. A biblioteca edge-tts é um cliente não oficial, não uma API comercial contratada da Microsoft. Antes de monetizar vídeos, verifique os termos aplicáveis ao uso comercial das vozes e do serviço.
+**Fluxo híbrido:** o Google Flow é usado manualmente para gerar os seis clipes. O bot não controla o site Flow automaticamente. O comando /flow entrega os prompts; envie os clipes na ordem e use /montar. A cota Cloudflare de texto e imagem é compartilhada. O Edge TTS precisa de conexão com a internet e depende de um serviço online de terceiros; a disponibilidade e os limites podem mudar. A biblioteca edge-tts é um cliente não oficial, não uma API comercial contratada da Microsoft. Antes de monetizar vídeos, verifique os termos aplicáveis ao uso comercial das vozes e do serviço.
 
 ## Vozes configuradas
 - Feminina: `pt-BR-FranciscaNeural`
@@ -36,7 +36,7 @@ Modelos padrão:
 - Texto: `@cf/meta/llama-3.1-8b-instruct`
 - Imagem: `@cf/black-forest-labs/flux-1-schnell`
 
-## Renderização
+## Comandos do modo híbrido\n- `/flow`: envia os prompts das seis cenas.\n- Envie os seis vídeos, um por vez e na ordem correta.\n- `/status`: mostra quantos clipes chegaram.\n- `/montar`: gera o episódio final.\n- `/limpar_clipes`: apaga os seis clipes recebidos.\n\n## Renderização
 O projeto usa `imageio-ffmpeg` para disponibilizar um binário FFmpeg no ambiente Python. A primeira geração de fala requer conexão com o serviço Edge TTS. O tempo de geração depende da conexão e dos limites do serviço externo.
 
 ## Segurança
