@@ -1,0 +1,1 @@
+Coloque aqui os modelos Piper pt_BR e ajuste os caminhos no .env. Confira a licença de cada voz.\n
