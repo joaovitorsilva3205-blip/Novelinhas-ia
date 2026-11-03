@@ -41,10 +41,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Fluxo econômico:\n"
-        "1) Envie o roteiro em texto.\n"
+        "1) Envie um roteiro em texto.\n"
         "2) O bot cria um plano de 6 cenas.\n"
         "3) Configure Cloudflare Workers AI para gerar as imagens automaticamente.\n"
-        "4) Configure FFmpeg e os modelos Piper na hospedagem.\n"
+        "4) Configure Edge TTS e FFmpeg na hospedagem.\n"
         "5) Envie /render para montar e receber o MP4.\n\n"
         "As imagens são estáticas com movimento de câmera; não há animação corporal real."
     )
@@ -104,8 +104,22 @@ async def render_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             scene_dir = user_dir / "scenes"
             work_dir = user_dir / "work"
             output_path = user_dir / "novelinha_final.mp4"
-            await msg.edit_text("Gerando imagens das seis cenas...")
-            await asyncio.to_thread(generate_scene_images, plan, scene_dir, update.effective_user.id)
+            loop = asyncio.get_running_loop()
+
+            def report_progress(message):
+                loop.call_soon_threadsafe(
+                    lambda: asyncio.create_task(msg.edit_text(message))
+                )
+
+            await msg.edit_text("Iniciando geração das imagens...")
+            await asyncio.to_thread(
+                generate_scene_images,
+                plan,
+                scene_dir,
+                update.effective_user.id,
+                report_progress,
+            )
+            await msg.edit_text("🎬 Imagens prontas! Montando vídeo e áudio...")
             output = await asyncio.to_thread(
                 render_video, plan, BASE, scene_dir, work_dir, output_path
             )
@@ -115,11 +129,12 @@ async def render_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     video=video_file,
                     caption=f"🍓 {plan.get('title', 'Novelinha')}"
                 )
-    except Exception:
+    except Exception as exc:
         log.exception("Falha ao renderizar vídeo")
         await msg.edit_text(
-            "Não consegui renderizar. Confira Cloudflare Workers AI, FFmpeg e os modelos Piper. "
-            "Os registros do servidor mostram o erro técnico."
+            "❌ Não consegui renderizar o vídeo. "
+            "Confira os logs do Render para identificar o erro. "
+            "Se puder, envie aqui o trecho do erro sem tokens ou senhas."
         )
 
 
@@ -133,7 +148,6 @@ def main():
 
     webhook_path = os.getenv("WEBHOOK_PATH") or secrets.token_urlsafe(24)
     raw_webhook_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET") or secrets.token_urlsafe(32)
-    # Telegram accepts only A-Z, a-z, 0-9, underscore and hyphen in webhook secrets.
     webhook_secret = hashlib.sha256(raw_webhook_secret.encode("utf-8")).hexdigest()
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
