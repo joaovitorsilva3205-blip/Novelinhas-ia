@@ -1,55 +1,43 @@
-# NOVELA FRUTAS AI v2 — modo econômico
+# NOVELA FRUTAS AI 2.0 — modo híbrido e implantação econômica
 
-## O que esta versão faz
-- Recebe um roteiro no Telegram.
-- Cria título, personagens, 6 cenas e diálogos com IA.
-- Renderiza um MP4 vertical de aproximadamente 60 segundos.
-- Gera falas localmente com Piper TTS.
-- Aplica movimento de câmera (Ken Burns) às imagens.
-- Envia o MP4 de volta pelo Telegram.
+## O que o projeto prepara
+- Bot do Telegram em Python usando webhook para hospedagem web.
+- Roteiros de seis cenas gerados por Cloudflare Workers AI.
+- Prompts detalhados para seis clipes de vídeo de 10 segundos no Google Flow (geração manual pelo usuário).
+- Recebimento de seis clipes do Google Flow pelo Telegram, dublagem brasileira e montagem vertical MP4 de 60 segundos.
+- Falas com vozes neurais brasileiras via Edge TTS: Francisca (feminina) e Antonio (masculina).
+- Envio do vídeo pelo Telegram.
 
-**Limitação importante:** o modo econômico anima a câmera sobre imagens estáticas. Os personagens não fazem movimentos corporais reais. Para isso, conecte um workflow de image-to-video no ComfyUI ou um serviço externo, que pode exigir GPU/ créditos.
+**Fluxo híbrido:** o Google Flow é usado manualmente para gerar os seis clipes. O bot não controla o site Flow automaticamente. O comando /flow entrega os prompts; envie os clipes na ordem e use /montar. A cota Cloudflare de texto e imagem é compartilhada. O Edge TTS precisa de conexão com a internet e depende de um serviço online de terceiros; a disponibilidade e os limites podem mudar. A biblioteca edge-tts é um cliente não oficial, não uma API comercial contratada da Microsoft. Antes de monetizar vídeos, verifique os termos aplicáveis ao uso comercial das vozes e do serviço.
 
-## Requisitos
-- Python 3.10+
-- FFmpeg instalado e disponível no PATH
-- Ollama instalado e em execução (opção sem API paga) ou chave OpenAI
-- Piper TTS e dois modelos de voz pt_BR
-- 6 imagens verticais PNG em `assets/scenes/scene_01.png` ... `scene_06.png`
-- Token do Telegram via @BotFather
+## Vozes configuradas
+- Feminina: `pt-BR-FranciscaNeural`
+- Masculina: `pt-BR-AntonioNeural`
 
-## Configuração
-1. `python -m venv .venv`
-2. Ative o ambiente virtual.
-3. `pip install -r requirements.txt`
-4. Copie `.env.example` para `.env`.
-5. Configure token e caminhos dos modelos Piper.
-6. Para Ollama, execute `ollama pull qwen2.5:7b` e mantenha o Ollama ativo.
-7. Crie as seis imagens em estilo consistente e coloque-as na pasta indicada.
-8. Execute `python run.py`.
-9. No Telegram, envie `/start`, depois o roteiro e, quando as imagens estiverem prontas, `/render`.
+Para trocar as vozes, configure `TTS_FEMALE_VOICE` e `TTS_MALE_VOICE` nas variáveis do Render. Não é necessário baixar modelos Piper nem instalar o Piper.
 
-## Planejador
-Padrão: Ollama local, sem cobrança por chamada de API (o custo é seu computador/energia).
-Para usar OpenAI: defina `PLANNER_PROVIDER=openai` e `OPENAI_API_KEY`.
+## Deploy de teste no Render Free
+1. Conecte este repositório e selecione a branch `melhorias-seguranca-mult-usuario`.
+2. Mantenha o serviço `novelinhas-ia-bot` no plano Free.
+3. Configure `TELEGRAM_BOT_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` e `CLOUDFLARE_API_TOKEN` no painel do Render.
+4. Faça o deploy e confira os logs antes de testar o bot no Telegram.
 
-## Imagens 3D
-Use ComfyUI local para gerar as imagens. A interface e backend são open-source e oferecem API local.
-Site: https://github.com/Comfy-Org/ComfyUI
-Depois de gerar 6 imagens, salve-as com os nomes scene_01.png a scene_06.png.
-Mantenha uma imagem de referência/descrição fixa por personagem para reduzir mudanças de aparência.
+O Render disponibiliza `RENDER_EXTERNAL_URL` para o endereço público do serviço; o bot usa essa URL para registrar o webhook.
 
-## Vozes
-Piper oferece vozes pt_BR. Baixe os arquivos `.onnx` e `.onnx.json` de vozes compatíveis.
-Leia o MODEL_CARD/licença de cada voz antes de uso comercial; licenças variam por modelo.
-Documentação: https://github.com/rhasspy/piper
-Não use uma voz que imite pessoa real sem autorização.
+## Importante sobre o plano gratuito
+Render Free suspende serviços web após 15 minutos sem tráfego de entrada e pode reiniciá-los. O sistema de arquivos é efêmero: arquivos gravados localmente podem ser perdidos quando o serviço reinicia ou suspende. Por isso, este deploy é apenas uma prova de conceito; um roteiro salvo localmente pode desaparecer após a suspensão. O plano Free também tem limites de horas, CPU e memória.
+Documentação: https://render.com/docs/free
 
-## Vídeo avançado
-ComfyUI pode executar workflows de image-to-video com modelos como LTX. Isso pode exigir GPU potente, bastante armazenamento e tempo de processamento.
-Guia: https://docs.ltx.io/open-source-model/usage-guides/image-to-video
-Se usar provedor de nuvem, confira preços e licença comercial antes de produzir em escala.
+## Cloudflare Workers AI
+O plano Free tem cota diária compartilhada entre os modelos. Ao atingir a cota, as chamadas falham até a renovação. Não ative um plano pago se quiser manter custo zero.
+Preços e limites: https://developers.cloudflare.com/workers-ai/platform/pricing/
 
-## Limites do Telegram
-O Bot API documenta envio de vídeos de até 50 MB. O projeto usa MP4 H.264/AAC; se o arquivo ultrapassar o limite, reduza o bitrate ou envie como documento conforme os limites vigentes.
-https://core.telegram.org/bots/api
+Modelos padrão:
+- Texto: `@cf/meta/llama-3.1-8b-instruct`
+- Imagem: `@cf/black-forest-labs/flux-1-schnell`
+
+## Comandos do modo híbrido\n- `/flow`: envia os prompts das seis cenas.\n- Envie os seis vídeos, um por vez e na ordem correta.\n- `/status`: mostra quantos clipes chegaram.\n- `/montar`: gera o episódio final.\n- `/limpar_clipes`: apaga os seis clipes recebidos.\n\n## Renderização
+O projeto usa `imageio-ffmpeg` para disponibilizar um binário FFmpeg no ambiente Python. A primeira geração de fala requer conexão com o serviço Edge TTS. O tempo de geração depende da conexão e dos limites do serviço externo.
+
+## Segurança
+Nunca grave tokens em arquivos versionados. Configure todos os segredos diretamente no painel de hospedagem. Não compartilhe tokens no chat nem no Telegram.
